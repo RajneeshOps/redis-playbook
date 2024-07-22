@@ -1,0 +1,125 @@
+---
+- name: Install and Configure Redis
+  hosts: all
+  become: yes
+  vars:
+    redis_version: "6.2.6"
+    redis_log_dir: "/var/log/redis"
+    redis_data_dir: "/var/lib/redis"
+    redis_conf_file_location: "/etc/redis"
+    redis_cluster_config_dir: "/etc/redis/cluster"
+
+  tasks:
+    - name: Ensure apt cache is up to date
+      apt:
+        update_cache: yes
+
+    - name: Install build-essential and other dependencies
+      apt:
+        name:
+          - build-essential
+          - tcl
+        state: present
+
+    - name: Ensure if redis is previously installed or not
+      stat:
+        path: "/usr/local/bin/redis-server"
+      register: redis_status
+
+    - name: Ensure the defined redis version is downloaded
+      unarchive:
+        src: "http://download.redis.io/releases/redis-{{ redis_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: yes
+      when: redis_status.stat.exists is not defined or not redis_status.stat.exists
+
+    - name: Ensure the build time dependencies are met
+      make:
+        chdir: "/tmp/redis-{{ redis_version }}"
+      become: yes
+      when: redis_status.stat.exists is not defined or not redis_status.stat.exists
+
+    - name: Ensuring redis server is installed on the system
+      make:
+        chdir: "/tmp/redis-{{ redis_version }}"
+        target: install
+      become: yes
+      when: redis_status.stat.exists is not defined or not redis_status.stat.exists
+
+    - name: Ensure the tarballs and build directory are cleaned up
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "/tmp/redis-{{ redis_version }}.tar.gz"
+        - "/tmp/redis-{{ redis_version }}"
+      become: yes
+
+    - name: Ensuring that redis group exists in system
+      group:
+        name: "redis"
+        state: present
+      become: yes
+
+    - name: Ensuring that redis user exists in system
+      user:
+        name: "redis"
+        group: "redis"
+        shell: /sbin/nologin
+        password: "!!"
+        createhome: no
+        system: yes
+        state: present
+      become: yes
+
+    - name: Ensure the configuration directories are present
+      file:
+        path: "{{ item }}"
+        state: directory
+        recurse: yes
+        owner: redis
+        group: redis
+      with_items:
+        - "{{ redis_log_dir }}"
+        - "{{ redis_data_dir }}"
+        - "{{ redis_conf_file_location }}"
+        - "{{ redis_cluster_config_dir }}"
+      become: yes
+
+    - name: Ensure Redis cluster nodes.conf file exists
+      file:
+        path: /etc/redis/cluster/nodes.conf
+        state: touch
+        owner: redis
+        group: redis
+        mode: '0664'
+      become: yes    
+
+    - name: Create Redis systemd service file
+      copy:
+        content: |
+          [Unit]
+          Description=Redis In-Memory Data Store
+          After=network.target
+
+          [Service]
+          User=redis
+          Group=redis
+          ExecStart=/usr/local/bin/redis-server /etc/redis/redis.conf
+          ExecStop=/usr/local/bin/redis-cli shutdown
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/redis.service
+      become: yes
+
+    - name: Reload systemd daemon
+      command: systemctl daemon-reload
+      become: yes
+
+    - name: Enable and start Redis service
+      service:
+        name: redis
+        state: started
+        enabled: yes
