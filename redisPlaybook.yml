@@ -8,6 +8,7 @@
     redis_data_dir: "/var/lib/redis"
     redis_conf_file_location: "/etc/redis"
     redis_cluster_config_dir: "/etc/redis/cluster"
+    redis_runtime_directory: "/var/run/redis"  # Added the missing variable
 
   tasks:
     - name: Ensure apt cache is up to date
@@ -84,6 +85,7 @@
         - "{{ redis_data_dir }}"
         - "{{ redis_conf_file_location }}"
         - "{{ redis_cluster_config_dir }}"
+        - "{{ redis_runtime_directory }}"  # Ensure runtime directory is created
       become: yes
 
     - name: Ensure Redis cluster nodes.conf file exists
@@ -126,3 +128,4 @@
         name: redis
         state: started
         enabled: yes
+      become: yes
