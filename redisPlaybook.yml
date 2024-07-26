@@ -3,7 +3,7 @@
   hosts: all
   become: yes
   vars:
-    redis_version: "7.0.6"
+    redis_version: "6.2.6"
     redis_log_dir: "/var/log/redis"
     redis_data_dir: "/var/lib/redis"
     redis_conf_file_location: "/etc/redis"
@@ -99,15 +99,18 @@
       copy:
         content: |
           [Unit]
-          Description=Redis In-Memory Data Store
+          Description=Redis persistent key-value database
           After=network.target
 
           [Service]
+          ExecStart=/usr/local/bin/redis-server {{ redis_conf_file_location }}/redis.conf --supervised systemd
+          ExecStop=/bin/redis-cli shutdown
+          Type=simple
           User=redis
           Group=redis
-          ExecStart=/usr/local/bin/redis-server /etc/redis/redis.conf
-          ExecStop=/usr/local/bin/redis-cli shutdown
-          Restart=always
+          RuntimeDirectory={{ redis_runtime_directory }}
+          RuntimeDirectoryMode=0755
+          LimitNOFILE=65535
 
           [Install]
           WantedBy=multi-user.target
